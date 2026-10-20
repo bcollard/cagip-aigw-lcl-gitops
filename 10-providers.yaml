@@ -1,0 +1,71 @@
+# LCL's own model providers (operational decision 2026-10-20: AI providers are managed by each
+# entity, not by the CAGIP platform). Keys come from Secret lcl-llm-keys, which LCL's pipeline
+# writes (write-only: no entity identity can read Secrets) and KO resolves and watches.
+# CAGIP still decides which provider types and endpoints are allowed (aigw-model-providers,
+# namespace annotations cagip.io/llm-provider-types and cagip.io/llm-hosts).
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-gemini, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    type: gemini
+    gemini:
+      name: lcl-gemini
+      displayName: Gemini API (AI Studio)
+      config:
+        auth:
+          type: basic
+          basic:
+            headers:
+              - { name: x-goog-api-key, value: { type: secretRef, secretRef: { name: lcl-llm-keys, key: gemini } } }
+---
+# Claude on Vertex through the PSC endpoint (mock-vertex in the lab): Kong signs a JWT with the
+# service account and trades it for a token at oauthTokenURL.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-vertex, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    type: gemini
+    gemini:
+      name: lcl-vertex
+      displayName: Vertex AI via PSC
+      config:
+        auth:
+          type: gcp
+          gcp:
+            useGcpServiceAccount: Enabled
+            oauthTokenURL: https://mock-vertex.lclv2.demo.internal/token
+            serviceAccountJSON: { type: secretRef, secretRef: { name: lcl-llm-keys, key: vertex-sa } }
+---
+# Embeddings for the semantic balancer.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-openai, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    type: openai
+    openai:
+      name: lcl-openai
+      displayName: OpenAI
+      config:
+        auth:
+          headers:
+            - { name: Authorization, value: { type: secretRef, secretRef: { name: lcl-llm-keys, key: openai-bearer } } }
+---
+# The on-prem model (Ollama stands for vLLM), OpenAI-compatible. No credential.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-onprem, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    type: openai
+    openai:
+      name: lcl-onprem
+      displayName: On-prem vLLM (Ollama in the lab)
+      config:
+        auth: {}

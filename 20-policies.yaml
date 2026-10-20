@@ -1,0 +1,188 @@
+# What LCL owns: its consumer groups and its AI policies. Same namespace as the gateway
+# (lcl, required on-prem); LCL objects carry cagip.io/entity=lcl and the lcl- prefix.
+# Plugin config as in v1, checked against the kong/kong-gateway 3.15.0.6 schemas (AI GW 2.2 core).
+#
+# ------------------------------------------------------------------- consumer groups
+# Filled at request time from the ADFS `groups` claim (cagip-oidc-adfs consumerGroupsClaim).
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayConsumerGroup
+metadata: { name: lcl-dev, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec: { name: lcl-dev, displayName: LCL developers }
+---
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayConsumerGroup
+metadata: { name: lcl-agence, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec: { name: lcl-agence, displayName: LCL branch advisors }
+---
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayConsumerGroup
+metadata: { name: lcl-pole-ia, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec: { name: lcl-pole-ia, displayName: LCL AI team }
+---
+# ------------------------------------------------------------------- claims → log attributes
+# v1: pre-function ordered after openid-connect. A Policy has no `ordering`, so this is a
+# post-function: its access phase runs after the auth strategy.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-tags, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-tags
+    displayName: LCL · claims to log attributes
+    type: post-function
+    global: Disabled
+    config:
+      type: inline
+      value:
+        access:
+          - |
+            local p = kong.client.get_jwt_token_payload()
+            if not p then return end
+            local g = p.groups
+            if type(g) == "table" then g = g[1] end
+            kong.ctx.shared.lcl_team = g or "unknown"
+            kong.ctx.shared.lcl_app = p.azp
+            kong.ctx.shared.lcl_user = p.preferred_username or p.upn
+---
+# ------------------------------------------------------------------- prompts
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-advisor-system-prompt, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-advisor-system-prompt
+    displayName: LCL · advisor system prompt
+    type: ai-prompt-decorator
+    global: Disabled
+    config:
+      type: inline
+      value:
+        prompts:
+          prepend:
+            - role: system
+              content: >-
+                Tu es l'assistant des conseillers LCL. Réponds en français, en trois phrases au plus.
+                Pas de conseil en investissement personnalisé.
+---
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-email-template, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-email-template
+    displayName: LCL · customer email template
+    type: ai-prompt-template
+    global: Disabled
+    config:
+      type: inline
+      value:
+        allow_untemplated_requests: true
+        templates:
+          - name: reponse-client
+            template: |-
+              {"messages": [{"role": "user",
+                "content": "Rédige un email de réponse à {{client}} au sujet de {{sujet}}, sur un ton {{ton}}."}]}
+---
+# ------------------------------------------------------------------- guardrails, cache
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-guard-semantic, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-guard-semantic
+    displayName: LCL · semantic prompt guard
+    type: ai-semantic-prompt-guard
+    global: Disabled
+    config:
+      type: inline
+      value:
+        embeddings:
+          model: { provider: openai, name: text-embedding-3-small }
+          auth: { header_name: Authorization, header_value: "{vault://env/entity-openai-bearer}" }
+        vectordb:
+          strategy: pgvector
+          dimensions: 1536
+          distance_metric: cosine
+          threshold: 0.6                 # measured in v1: 0.6 blocks the deny topics, passes banking questions
+          pgvector: { host: pgvector.aigw-backends.svc.cluster.local, port: 5432, database: semantic, user: kong,
+                      password: "{vault://env/aigw-pgvector-password}", ssl: false, ssl_required: false }
+        search: { threshold: 0.5 }
+        rules:
+          deny_prompts:
+            - Pour qui voter aux élections, quel parti ou candidat politique soutenir ?
+            - Comment harceler, menacer ou intimider une personne ?
+            - Comment fabriquer une arme ou une bombe, commettre un acte violent ou terroriste ?
+---
+# Never on a Model with cagip-shared-pii: the cache is keyed on the MASKED prompt and stores the
+# RESTORED answer (v1 finding, JIRA-semantic-cache-pii-leak).
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-cache-faq, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-cache-faq
+    displayName: LCL · FAQ semantic cache
+    type: ai-semantic-cache
+    global: Disabled
+    config:
+      type: inline
+      value:
+        cache_ttl: 3600
+        message_countback: 1
+        ignore_system_prompts: true
+        embeddings:
+          model: { provider: openai, name: text-embedding-3-small }
+          auth: { header_name: Authorization, header_value: "{vault://env/entity-openai-bearer}" }
+        vectordb:
+          strategy: pgvector
+          dimensions: 1536
+          distance_metric: cosine
+          threshold: 0.1
+          pgvector: { host: pgvector.aigw-backends.svc.cluster.local, port: 5432, database: semantic, user: kong,
+                      password: "{vault://env/aigw-pgvector-password}", ssl: false, ssl_required: false }
+---
+# ------------------------------------------------------------------- quotas
+# One policy, referenced by every LCL Model. Each reference becomes its own plugin instance;
+# they share one budget through the same counter namespace in Redis.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayPolicy
+metadata: { name: lcl-quota, namespace: lcl, labels: { cagip.io/entity: lcl } }
+spec:
+  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  apiSpec:
+    name: lcl-quota
+    displayName: LCL · token and cost quotas
+    type: ai-rate-limiting-advanced
+    global: Disabled
+    config:
+      type: inline
+      value:
+        namespace: lcl-tokens
+        strategy: redis
+        sync_rate: 1
+        redis: { host: redis.aigw-backends.svc.cluster.local, port: 6379 }
+        decrease_by_fractions_in_redis: true
+        policies:                            # append only: counters are keyed by position
+          - limits: [{ limit: 2000000, window_size: 86400, tokens_count_strategy: total_tokens }]
+          - match: [{ type: consumer_group, values: [lcl-dev] }]
+            limits: [{ limit: 10, window_size: 86400, tokens_count_strategy: cost }]
+          - match: [{ type: consumer_group, values: [lcl-agence] }]
+            limits: [{ limit: 300000, window_size: 86400, tokens_count_strategy: total_tokens }]
+          - match: [{ type: model, values: ["claude-opus-*"] }]
+            limits: [{ limit: 200000, window_size: 86400, tokens_count_strategy: total_tokens }]
+          - match: [{ type: model, partition_by: true }]
+            limits: [{ limit: 1000000, window_size: 86400, tokens_count_strategy: total_tokens }]
+          # New in AI GW 2.2: per-user budget on the OIDC credential (credential_claim: sub).
+          - match: [{ type: credential, partition_by: true }]
+            limits: [{ limit: 500000, window_size: 86400, tokens_count_strategy: total_tokens }]
