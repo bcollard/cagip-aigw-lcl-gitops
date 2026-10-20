@@ -1,0 +1,69 @@
+# LCL's model providers. Keys are secretRefs to the Secret {{ .Values.credentialsSecret }}, created out of
+# band by LCL (never in Git); Kong Operator resolves and watches it. CAGIP's chart decides which
+# provider types and endpoints are allowed (VAP aigw-model-providers).
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-gemini, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
+spec:
+  {{ include "lcl.gatewayRef" . }}
+  apiSpec:
+    type: gemini
+    gemini:
+      name: lcl-gemini
+      displayName: Gemini API (AI Studio)
+      config:
+        auth:
+          type: basic
+          basic:
+            headers:
+              - { name: x-goog-api-key, value: { type: secretRef, secretRef: { name: {{ .Values.credentialsSecret }}, key: GEMINI_API_KEY } } }
+---
+# Claude on Vertex through the PSC endpoint (mock-vertex in the lab): Kong signs a JWT with the
+# service account and trades it for a token at oauthTokenURL.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-vertex, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
+spec:
+  {{ include "lcl.gatewayRef" . }}
+  apiSpec:
+    type: gemini
+    gemini:
+      name: lcl-vertex
+      displayName: Vertex AI via PSC
+      config:
+        auth:
+          type: gcp
+          gcp:
+            useGcpServiceAccount: Enabled
+            oauthTokenURL: https://{{ .Values.vertex.endpoint }}/token
+            serviceAccountJSON: { type: secretRef, secretRef: { name: {{ .Values.credentialsSecret }}, key: VERTEX_SA_JSON } }
+---
+# Embeddings for the semantic balancer.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-openai, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
+spec:
+  {{ include "lcl.gatewayRef" . }}
+  apiSpec:
+    type: openai
+    openai:
+      name: lcl-openai
+      displayName: OpenAI
+      config:
+        auth:
+          headers:
+            - { name: Authorization, value: { type: secretRef, secretRef: { name: {{ .Values.credentialsSecret }}, key: OPENAI_BEARER } } }
+---
+# The on-prem model (Ollama stands for vLLM), OpenAI-compatible. No credential.
+apiVersion: aiconfiguration.konghq.com/v1alpha1
+kind: AIGatewayModelProvider
+metadata: { name: lcl-onprem, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
+spec:
+  {{ include "lcl.gatewayRef" . }}
+  apiSpec:
+    type: openai
+    openai:
+      name: lcl-onprem
+      displayName: On-prem vLLM (Ollama in the lab)
+      config:
+        auth: {}

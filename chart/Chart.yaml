@@ -1,0 +1,8 @@
+apiVersion: v2
+name: lcl-aigw
+description: >-
+  LCL's AI configuration on its Kong AI Gateway: model providers, Models, AI policies
+  (guardrails, prompts, cache, usage plan), consumer groups and an MCP server. Deployed into the
+  gateway namespace created by CAGIP's cagip-aigw-platform chart.
+type: application
+version: 0.1.0

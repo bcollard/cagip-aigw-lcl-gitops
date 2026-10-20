@@ -4,16 +4,16 @@
 # strategy are part of the MCP server, so the tools call the backend directly.
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayMCPServer
-metadata: { name: lcl-mcp-agences, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-mcp-agences, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: conversion-listener
     conversion-listener:
       name: lcl-mcp-agences
       displayName: LCL · agences (MCP)
       config:
-        url: http://agences-api.aigw-backends.svc.cluster.local
+        url: http://agences-api.{{ .Values.backendsNamespace }}.svc.cluster.local
         route: { paths: [/lcl/mcp] }
       tools:
         - name: list_agences
@@ -29,5 +29,3 @@ spec:
         consumer:
           authStrategies: [{ name: cagip-oidc-adfs }]
           acls: { allow: [{ name: lcl-agence }, { name: lcl-pole-ia }] }
-      policies:
-        - { name: lcl-tags }

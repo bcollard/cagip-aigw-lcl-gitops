@@ -1,0 +1,17 @@
+# LCL's AI configuration. Synced by the Argo CD Application lcl-aigw as argocd/entity-deployer:
+# CAGIP's RBAC and ValidatingAdmissionPolicies check every object.
+
+gateway: aigw                            # OnPremAIGateway of the cluster (CAGIP's chart)
+credentialsSecret: entity-credentials    # created out of band: GEMINI_API_KEY, OPENAI_BEARER, VERTEX_SA_JSON, PGVECTOR_PASSWORD
+backendsNamespace: aigw-backends         # Redis, pgvector, Ollama, PII service, agences API
+
+vertex:                                  # Claude on Vertex AI through Private Service Connect
+  endpoint: mock-vertex.lclv2.demo.internal
+  project: lcl-olive-lab
+  location: europe-west4
+
+models:
+  geminiChat: gemini-2.5-flash
+  onprem: qwen2.5:0.5b                   # stands for an on-prem vLLM model
+  embeddings: text-embedding-3-small     # OpenAI, semantic guard and cache
+  embeddingsDimensions: 1536

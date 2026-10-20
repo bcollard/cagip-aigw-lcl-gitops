@@ -4,16 +4,17 @@
 # endpoint (anthropic → /v1/messages, openai → /chat/completions, /embeddings).
 # Clients select the Model with the body `model` field (the Model's apiSpec.model.name).
 #
-# Every LLM Model carries the CAGIP-mandatory set: cagip-oidc-adfs (auth),
-# cagip-shared-strip-identity, cagip-shared-baseline-guard, lcl-tags, lcl-quota.
+# Every Model carries what CAGIP's chart requires (VAP aigw-models): the auth strategy
+# cagip-oidc-adfs and the policies cagip-strip-identity and cagip-baseline-guard. lcl-quota is
+# LCL's usage plan.
 #
 # ------------------------------------------------------------------- UC1 Claude Code (/lcl/claude)
 # Three Models on one base path: Claude Code sends {"model": "<name>"} to /lcl/claude/v1/messages.
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-claude-sonnet, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-claude-sonnet, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -41,27 +42,26 @@ spec:
             gemini:
               inputCost: 3
               outputCost: 15
-              gcpEnvironment: { apiEndpoint: "mock-vertex.lclv2.demo.internal", projectID: "lcl-olive-lab", locationID: "europe-west4" }
-        - name: qwen2.5:0.5b
+              gcpEnvironment: { apiEndpoint: "{{ .Values.vertex.endpoint }}", projectID: "{{ .Values.vertex.project }}", locationID: "{{ .Values.vertex.location }}" }
+        - name: {{ .Values.models.onprem }}
           weight: 10
           provider: { name: lcl-onprem }
           config:
             type: openai
-            openai: { upstreamURL: "http://ollama.aigw-backends.svc.cluster.local:11434/v1/chat/completions" }
+            openai: { upstreamURL: "http://ollama.{{ .Values.backendsNamespace }}.svc.cluster.local:11434/v1/chat/completions" }
       access:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-dev }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-quota }
 ---
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-claude-opus, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-claude-opus, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -80,22 +80,21 @@ spec:
             gemini:
               inputCost: 15
               outputCost: 75
-              gcpEnvironment: { apiEndpoint: "mock-vertex.lclv2.demo.internal", projectID: "lcl-olive-lab", locationID: "europe-west4" }
+              gcpEnvironment: { apiEndpoint: "{{ .Values.vertex.endpoint }}", projectID: "{{ .Values.vertex.project }}", locationID: "{{ .Values.vertex.location }}" }
       access:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-quota }
 ---
 # Cross-provider alias: Claude Code asks for haiku, Gemini answers (real call).
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-claude-haiku, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-claude-haiku, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -107,16 +106,15 @@ spec:
         route: { paths: [/lcl/claude] }
         logging: { payloads: Disabled }
       targets:
-        - name: gemini-2.5-flash
+        - name: {{ .Values.models.geminiChat }}
           provider: { name: lcl-gemini }
           config: { type: gemini, gemini: { inputCost: 0.3, outputCost: 2.5 } }
       access:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-dev }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-quota }
 ---
 # ------------------------------------------------------------------- UC2 branch-advisor assistant
@@ -125,9 +123,9 @@ spec:
 # (template: the PII sanitizer and semantic guard cannot read a templated request).
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-assistant, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-assistant, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -142,16 +140,16 @@ spec:
         # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
         #   algorithm: semantic
         #   semantic:
-        #     embeddings: { name: text-embedding-3-small, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.aigw-backends.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/aigw-pgvector-password}",
-        #                 dimensions: 1536, distanceMetric: cosine, threshold: 0.7 } }
+        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         balancer:
           algorithm: priority            # until then: Flash first, Pro on failure
           priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
         logging: { payloads: Disabled }
       targets:
-        - name: gemini-2.5-flash
+        - name: {{ .Values.models.geminiChat }}
           provider: { name: lcl-gemini }
           weight: 100
           semanticDescription: questions sur les produits, les frais et les procédures internes de la banque
@@ -165,19 +163,18 @@ spec:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-agence }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
-        - { name: cagip-shared-pii }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
+        - { name: lcl-pii }
         - { name: lcl-guard-semantic }
         - { name: lcl-advisor-system-prompt }
         - { name: lcl-quota }
 ---
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-faq, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-faq, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -192,16 +189,16 @@ spec:
         # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
         #   algorithm: semantic
         #   semantic:
-        #     embeddings: { name: text-embedding-3-small, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.aigw-backends.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/aigw-pgvector-password}",
-        #                 dimensions: 1536, distanceMetric: cosine, threshold: 0.7 } }
+        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         balancer:
           algorithm: priority            # until then: Flash first, Pro on failure
           priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
         logging: { payloads: Disabled }
       targets:
-        - name: gemini-2.5-flash
+        - name: {{ .Values.models.geminiChat }}
           provider: { name: lcl-gemini }
           weight: 100
           semanticDescription: questions sur les produits, les frais et les procédures internes de la banque
@@ -215,9 +212,8 @@ spec:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-agence }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-guard-semantic }
         - { name: lcl-cache-faq }
         - { name: lcl-advisor-system-prompt }
@@ -225,9 +221,9 @@ spec:
 ---
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-email, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-email, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -242,16 +238,16 @@ spec:
         # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
         #   algorithm: semantic
         #   semantic:
-        #     embeddings: { name: text-embedding-3-small, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.aigw-backends.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/aigw-pgvector-password}",
-        #                 dimensions: 1536, distanceMetric: cosine, threshold: 0.7 } }
+        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         balancer:
           algorithm: priority            # until then: Flash first, Pro on failure
           priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
         logging: { payloads: Disabled }
       targets:
-        - name: gemini-2.5-flash
+        - name: {{ .Values.models.geminiChat }}
           provider: { name: lcl-gemini }
           weight: 100
           semanticDescription: questions sur les produits, les frais et les procédures internes de la banque
@@ -265,17 +261,16 @@ spec:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-agence }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-email-template }
         - { name: lcl-quota }
 ---
 apiVersion: aiconfiguration.konghq.com/v1alpha1
 kind: AIGatewayModel
-metadata: { name: lcl-embeddings, namespace: lcl, labels: { cagip.io/entity: lcl } }
+metadata: { name: lcl-embeddings, namespace: {{ .Release.Namespace }}, labels: {{ include "lcl.labels" . }} }
 spec:
-  aiGatewayRef: { group: aigateway.konghq.com, kind: OnPremAIGateway, namespacedRef: { name: lcl-aigw } }
+  {{ include "lcl.gatewayRef" . }}
   apiSpec:
     type: model
     model:
@@ -294,7 +289,6 @@ spec:
         authStrategies: [{ name: cagip-oidc-adfs }]
         acls: { type: allow, allow: { allow: [{ name: lcl-dev }, { name: lcl-agence }, { name: lcl-pole-ia }] } }
       policies:
-        - { name: cagip-shared-strip-identity }
-        - { name: cagip-shared-baseline-guard }
-        - { name: lcl-tags }
+        - { name: cagip-strip-identity }
+        - { name: cagip-baseline-guard }
         - { name: lcl-quota }
