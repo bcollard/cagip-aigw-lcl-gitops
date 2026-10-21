@@ -176,6 +176,8 @@ spec:
             limits: [{ limit: 200000, window_size: 86400, tokens_count_strategy: total_tokens }]
           - match: [{ type: model, partition_by: true }]
             limits: [{ limit: 1000000, window_size: 86400, tokens_count_strategy: total_tokens }]
-          # New in AI GW 2.2: per-user budget on the OIDC credential (credential_claim: sub).
+          # New in AI GW 2.2: per-employee budget on the OIDC credential (CAGIP's auth strategy
+          # credentialClaim: upn in ADFS, preferred_username in the lab). Every matching policy
+          # applies, so a named employee's plan (match values: [<upn>]) can only be stricter.
           - match: [{ type: credential, partition_by: true }]
             limits: [{ limit: 500000, window_size: 86400, tokens_count_strategy: total_tokens }]
