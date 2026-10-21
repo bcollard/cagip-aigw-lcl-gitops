@@ -3,7 +3,8 @@
 Demo content for a Kong AI Gateway 2.x lab on Kong Operator: the bank, entities and host names
 are illustrative.
 
-`chart/` is LCL's chart, `lcl-aigw`: what LCL's AI team owns on its AI Gateway.
+`chart/` is LCL's chart, `lcl-aigw`: what LCL's AI team owns on its AI Gateway. The team
+chooses its providers, endpoints, MCP upstreams and token budgets; changes are reviewed in this repo.
 
 | Template | What |
 |---|---|
@@ -18,8 +19,9 @@ The Argo CD Application `lcl-aigw` syncs it into namespace `ai-gateway` as the S
 
 - RBAC: these five kinds only, in that namespace only.
 - ValidatingAdmissionPolicies: every Model lists the ADFS auth strategy and the mandatory
-  policies `cagip-strip-identity` and `cagip-baseline-guard`; policy and provider types, upstream
-  hosts and the token cap come from CAGIP's values; no Lua, no global policy, no inline key.
+  policies `cagip-strip-identity` and `cagip-baseline-guard`; policy types from CAGIP's list; no
+  LLM endpoint the group denies; usage plans on Redis with a total budget; no Lua, no global
+  policy, no inline key.
 
 Not in Git: the Secret `entity-credentials` (`GEMINI_API_KEY`, `OPENAI_BEARER`, `VERTEX_SA_JSON`,
 `PGVECTOR_PASSWORD`), created out of band by LCL. Policies read its keys as
