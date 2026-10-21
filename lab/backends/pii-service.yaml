@@ -1,0 +1,25 @@
+# Kong AI PII Anonymizer service, used by the ai-sanitizer policy lcl-pii (Model lcl-assistant).
+# The image is in Kong's private registry: create an image pull Secret with your Kong registry credentials.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ai-pii-service, namespace: aigw-backends, labels: { app: ai-pii-service } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ai-pii-service } }
+  template:
+    metadata: { labels: { app: ai-pii-service } }
+    spec:
+      imagePullSecrets: [{ name: kong-registry }]
+      containers:
+        - name: pii
+          image: kong/ai-pii-service:v0.2.2-en
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          resources: { requests: { cpu: 200m, memory: 1Gi }, limits: { memory: 3Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ai-pii-service, namespace: aigw-backends }
+spec:
+  selector: { app: ai-pii-service }
+  ports: [{ port: 8080, targetPort: 8080 }]

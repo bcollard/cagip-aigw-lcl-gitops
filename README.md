@@ -13,6 +13,12 @@ chooses its providers, endpoints, MCP upstreams and token budgets; changes are r
 | `30-models.yaml` | AI Models: what clients call, which targets, which policies |
 | `40-mcp.yaml` | an MCP server exposing a REST API as tools |
 
+`lab/backends/` holds lab stand-ins for LCL's backends, outside the chart: Redis (usage-plan
+counters), pgvector (semantic guard and cache), Ollama (on-prem model), mock-vertex (Claude on
+Vertex through PSC), the agences API (MCP tools), the PII service, and a cert-manager lab CA for the
+gateway and mock-vertex certificates. Apply them with `kubectl` before the chart syncs; replace them
+with LCL's real services in production.
+
 The Argo CD Application `lcl-aigw` syncs it into namespace `ai-gateway` as the ServiceAccount
 `argocd/entity-deployer`. CAGIP's platform chart
 ([cagip-aigw-platform-gitops](https://github.com/bcollard/cagip-aigw-platform-gitops)) decides what that identity may do:

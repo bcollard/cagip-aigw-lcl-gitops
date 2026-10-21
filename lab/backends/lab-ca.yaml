@@ -1,0 +1,53 @@
+# Lab PKI with cert-manager: one self-signed CA that signs the gateway's certificate and
+# mock-vertex's. Skip it when your own PKI issues the gateway certificate and you call real Vertex.
+#   envsubst '${AI_HOST}' < lab-ca.yaml | kubectl apply -f -
+# Then give the DataPlane the CA (clusters/lcl.yaml gateway.trustedCAConfigMap: lab-ca):
+#   kubectl -n ai-gateway create configmap lab-ca \
+#     --from-literal=ca.crt="$(kubectl -n cert-manager get secret lab-ca -o jsonpath='{.data.ca\.crt}' | base64 -d)"
+apiVersion: v1
+kind: Namespace
+metadata: { name: ai-gateway }
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: aigw-backends }
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: { name: lab-selfsigned }
+spec: { selfSigned: {} }
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: lab-ca, namespace: cert-manager }
+spec:
+  isCA: true
+  commonName: AI Gateway lab CA
+  secretName: lab-ca
+  privateKey: { algorithm: ECDSA, size: 256 }
+  issuerRef: { name: lab-selfsigned, kind: ClusterIssuer }
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: { name: lab-ca }
+spec: { ca: { secretName: lab-ca } }
+---
+# The gateway's TLS Secret (clusters/lcl.yaml gateway.tlsSecretName: aigw-tls). Kong Operator reads
+# only Secrets labelled konghq.com/secret=true.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: aigw-tls, namespace: ai-gateway }
+spec:
+  secretName: aigw-tls
+  secretTemplate: { labels: { konghq.com/secret: "true" } }
+  dnsNames: ["${AI_HOST}"]
+  issuerRef: { name: lab-ca, kind: ClusterIssuer }
+---
+# mock-vertex: the "PSC endpoint" Kong calls over HTTPS (LCL's chart value vertex.endpoint).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: mock-vertex-tls, namespace: aigw-backends }
+spec:
+  secretName: mock-vertex-tls
+  dnsNames: [mock-vertex.aigw-backends.svc.cluster.local]
+  issuerRef: { name: lab-ca, kind: ClusterIssuer }

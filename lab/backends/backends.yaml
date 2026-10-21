@@ -1,0 +1,146 @@
+# Lab stand-ins for LCL's backends, in namespace aigw-backends (LCL's chart value backendsNamespace).
+#   redis        usage-plan counters (lcl-quota)
+#   pgvector     semantic guard and semantic cache (database semantic, user kong, Secret pgvector)
+#   ollama       on-prem model, stands for vLLM (fallback target of claude-sonnet-4-6)
+#   mock-vertex  Claude on Vertex AI through PSC: token endpoint + :rawPredict, TLS from lab-ca.yaml
+#   agences-api  REST API exposed as MCP tools (httpbin)
+# All cluster-internal.
+apiVersion: v1
+kind: Namespace
+metadata: { name: aigw-backends }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis, namespace: aigw-backends, labels: { app: redis } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.4
+          args: ["--save", "", "--appendonly", "no"]
+          ports: [{ containerPort: 6379 }]
+          resources: { requests: { cpu: 20m, memory: 32Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis, namespace: aigw-backends }
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pgvector, namespace: aigw-backends, labels: { app: pgvector } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: pgvector } }
+  template:
+    metadata: { labels: { app: pgvector } }
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg17
+          env:
+            - { name: POSTGRES_USER, value: kong }
+            - { name: POSTGRES_DB, value: semantic }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: pgvector, key: password } }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe: { exec: { command: ["pg_isready", "-U", "kong", "-d", "semantic"] }, periodSeconds: 5 }
+          resources: { requests: { cpu: 50m, memory: 128Mi } }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: pgvector, namespace: aigw-backends }
+spec:
+  selector: { app: pgvector }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ollama, namespace: aigw-backends, labels: { app: ollama } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ollama } }
+  template:
+    metadata: { labels: { app: ollama } }
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.12.3
+          env: [{ name: OLLAMA_KEEP_ALIVE, value: "24h" }]
+          ports: [{ containerPort: 11434 }]
+          readinessProbe: { httpGet: { path: /api/version, port: 11434 }, periodSeconds: 5 }
+          resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { memory: 3Gi } }
+          volumeMounts: [{ name: models, mountPath: /root/.ollama }]
+      volumes: [{ name: models, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ollama, namespace: aigw-backends }
+spec:
+  selector: { app: ollama }
+  ports: [{ port: 11434, targetPort: 11434 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mock-vertex, namespace: aigw-backends, labels: { app: mock-vertex } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mock-vertex } }
+  template:
+    metadata:
+      labels: { app: mock-vertex }
+    spec:
+      containers:
+        - name: mock-vertex
+          image: python:3.12-slim
+          command: ["python3", "-u", "/app/mock-vertex.py"]
+          ports: [{ containerPort: 8443, name: https }, { containerPort: 8080, name: admin }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 5 }
+          resources: { requests: { cpu: 20m, memory: 32Mi } }
+          volumeMounts:
+            - { name: app, mountPath: /app }
+            - { name: tls, mountPath: /tls, readOnly: true }
+      volumes:
+        - { name: app, configMap: { name: mock-vertex } }
+        - { name: tls, secret: { secretName: mock-vertex-tls } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-vertex
+  namespace: aigw-backends
+spec:
+  selector: { app: mock-vertex }
+  ports:
+    - { name: https, port: 443, targetPort: 8443 }
+    - { name: admin, port: 8080, targetPort: 8080 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: agences-api, namespace: aigw-backends, labels: { app: agences-api } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: agences-api } }
+  template:
+    metadata: { labels: { app: agences-api } }
+    spec:
+      containers:
+        - name: httpbin
+          image: mccutchen/go-httpbin:v2.15.0           # no args: listens on :8080
+          ports: [{ containerPort: 8080 }]
+          resources: { requests: { cpu: 10m, memory: 16Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: agences-api, namespace: aigw-backends }
+spec:
+  selector: { app: agences-api }
+  ports: [{ port: 80, targetPort: 8080 }]
