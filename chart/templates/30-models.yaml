@@ -135,18 +135,15 @@ spec:
       formats: [{ type: openai }]
       config:
         route: { paths: [/lcl/assistant] }
-        # KO nightly bug (f4a00ed, still in d64fca2): the semantic balancer reaches ai-proxy-advanced in the CRD shape
-        # (vectordb.type/pgvector, embeddings.name/config) instead of the converter's shape, and the
-        # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
-        #   algorithm: semantic
-        #   semantic:
-        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+        # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
+        # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
         balancer:
-          algorithm: priority            # until then: Flash first, Pro on failure
-          priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
+          algorithm: semantic
+          semantic:
+            embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+            vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+                        database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
@@ -184,18 +181,15 @@ spec:
       formats: [{ type: openai }]
       config:
         route: { paths: [/lcl/faq] }
-        # KO nightly bug (f4a00ed, still in d64fca2): the semantic balancer reaches ai-proxy-advanced in the CRD shape
-        # (vectordb.type/pgvector, embeddings.name/config) instead of the converter's shape, and the
-        # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
-        #   algorithm: semantic
-        #   semantic:
-        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+        # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
+        # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
         balancer:
-          algorithm: priority            # until then: Flash first, Pro on failure
-          priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
+          algorithm: semantic
+          semantic:
+            embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+            vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+                        database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
@@ -233,18 +227,15 @@ spec:
       formats: [{ type: openai }]
       config:
         route: { paths: [/lcl/assistant/email] }
-        # KO nightly bug (f4a00ed, still in d64fca2): the semantic balancer reaches ai-proxy-advanced in the CRD shape
-        # (vectordb.type/pgvector, embeddings.name/config) instead of the converter's shape, and the
-        # DataPlane rejects the whole push. Intended config, to restore once fixed (JIRA-ko-semantic-balancer.md):
-        #   algorithm: semantic
-        #   semantic:
-        #     embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
-        #     vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
-        #                 database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-        #                 dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+        # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
+        # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
         balancer:
-          algorithm: priority            # until then: Flash first, Pro on failure
-          priority: { retries: 1, failoverCriteria: [error, timeout, http_429, http_500, http_502, http_503, http_504, non_idempotent] }
+          algorithm: semantic
+          semantic:
+            embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
+            vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
+                        database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
