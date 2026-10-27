@@ -137,13 +137,15 @@ spec:
         route: { paths: [/lcl/assistant] }
         # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
         # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
+        # Threshold 1.0 (cosine distance): the closest target always wins; under 0.7, a question far from
+        # both descriptions found no target and got 503 "No peers are available".
         balancer:
           algorithm: semantic
           semantic:
             embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
             vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
                         database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 1.0 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
@@ -183,13 +185,15 @@ spec:
         route: { paths: [/lcl/faq] }
         # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
         # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
+        # Threshold 1.0 (cosine distance): the closest target always wins; under 0.7, a question far from
+        # both descriptions found no target and got 503 "No peers are available".
         balancer:
           algorithm: semantic
           semantic:
             embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
             vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
                         database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 1.0 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
@@ -229,13 +233,15 @@ spec:
         route: { paths: [/lcl/assistant/email] }
         # Semantic routing: each target's semanticDescription is embedded once; a request goes to the
         # closest target (questions → Flash, emails → Pro). Needs Kong Operator ≥ nightly 20261027 (#6240).
+        # Threshold 1.0 (cosine distance): the closest target always wins; under 0.7, a question far from
+        # both descriptions found no target and got 503 "No peers are available".
         balancer:
           algorithm: semantic
           semantic:
             embeddings: { name: {{ .Values.models.embeddings }}, provider: lcl-openai, config: { type: openai } }
             vectordb: { type: pgvector, pgvector: { host: pgvector.{{ .Values.backendsNamespace }}.svc.cluster.local, port: 5432,
                         database: semantic, user: kong, password: "{vault://env/entity-pgvector-password}",
-                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 0.7 } }
+                        dimensions: {{ .Values.models.embeddingsDimensions }}, distanceMetric: cosine, threshold: 1.0 } }
         logging: { payloads: Disabled }
       targets:
         - name: {{ .Values.models.geminiChat }}
